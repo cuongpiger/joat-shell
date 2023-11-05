@@ -27,7 +27,7 @@ function async_runfunc {
 function async_cleanup {
   local name
 
-  if [[ "$ALLOWING_PARALLEL" != "True" ]]; then
+  if [[ "$JOAT_SHELL_ALLOWING_PARALLEL" != "True" ]]; then
     return 0
   fi
 
@@ -59,7 +59,7 @@ function async_run {
   iniset $inifile job command "$*"
   iniset $inifile job start_time $(date +%s%3N)
 
-  if [[ "$ALLOWING_PARALLEL" = "True" ]]; then
+  if [[ "$JOAT_SHELL_ALLOWING_PARALLEL" = "True" ]]; then
     mkfifo $fifo # Create a FIFO file
     async_inner $name $* &
     iniset $inifile job pid $!
