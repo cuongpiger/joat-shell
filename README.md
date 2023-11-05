@@ -22,7 +22,7 @@
 - Clone the repository.
   ```bash
   # inside the container
-  git clone https://github.com/cuongpiger/joat-shell.git --depth
+  git clone https://github.com/cuongpiger/joat-shell.git --depth 1
   ```
 
 - Go to the `joat-shell` directory and run the [test.sh](./test.sh) script.
