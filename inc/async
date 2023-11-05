@@ -105,6 +105,38 @@ function async_cleanup {
   done
 }
 
+function async_print_timing {
+  local bg_time_minus_wait
+  local elapsed_time
+  local serial_time
+  local speedup
+
+  if [[ "$JOAT_SHELL_ALLOWING_PARALLEL" != "True" ]]; then
+    return 0
+  fi
+
+  # The logic here is: All the background task time would be
+  # serialized if we did not do them in the background. So we can
+  # add that to the elapsed time for the whole run. However, time we
+  # spend waiting for async things to finish adds to the elapsed
+  # time, but is time where we're not doing anything useful. Thus,
+  # we substract that from the would-be-serialized time.
+
+  bg_time_minus_wait=$(((\
+    $_JOAT_SHELL_ASYNC_BG_TIME - ${_JOAT_SHELL_TIME_TOTAL[async_wait]}) / 1000))
+  elapsed_time=$(($(date "+%s") - $_JOST_SHELL_TIME_BEGIN))
+  serial_time=$(($elapsed_time + $bg_time_minus_wait))
+
+  echo
+  echo "================="
+  echo " Async summary"
+  echo "================="
+  echo " Time spent in the background minus waits: $bg_time_minus_wait sec"
+  echo " Elapsed time: $elapsed_time sec"
+  echo " Time if we did everything serially: $serial_time sec"
+  echo " Speedup: " $(echo | awk "{print $serial_time / $elapsed_time}")
+}
+
 # **************************************** PRIVATE METHODS *****************************************
 
 # Run something async. Takes a symbolic name and a list of arguments of what to run. Ideally this

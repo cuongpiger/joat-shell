@@ -9,6 +9,7 @@
 
 declare -A -g _JOAT_SHELL_TIME_START
 declare -A -g _JOAT_SHELL_TIME_TOTAL
+declare -r -g _JOST_SHELL_TIME_BEGIN=$(date +%s)
 
 # ************************************** IMPLEMENTED FUNCTIONS *************************************
 
