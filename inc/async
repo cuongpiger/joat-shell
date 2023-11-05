@@ -1,0 +1,90 @@
+#!/bin/bash
+
+####################################################################################################
+# Author: Cuong. Duong Manh <cuongdm8499@gmail.com>
+# Description: This script is used to run a function in background.
+####################################################################################################
+
+# ***************************************** PUBLIC METHODS *****************************************
+
+# Shortcut for running a shell function async. Uses the function name as the async name
+function async_runfunc {
+  async_run $1 $*
+}
+
+# **************************************** PRIVATE METHODS *****************************************
+
+# Run something async. Takes a symbolic name and a list of arguments of what to run. Ideally this
+# would be rarely used and async_runfunc() would be used everywhere for readability.
+#
+# This spawns the work in a background worker, records a "future" to be collected by a later call
+# to async_wait()
+function async_run {
+  local xtrace
+  xtrace=$(set +o | grep xtrace)
+  set +o xtrace
+
+  local name="$1"
+  shift
+  local inifile=${DEST}/async/${name}.ini
+  local fifo=${DEST}/async/${name}.fifo
+
+  touch $inifile
+  iniset $inifile job command "$*"
+  iniset $inifile job start_time $(date +%s%3N)
+
+  if [[ "$ALLOWING_PARALLEL" = "True" ]]; then
+    mkfifo $fifo # Create a FIFO file
+    async_inner $name $* &
+    iniset $inifile job pid $!
+    async_log "$name" "running: %command"
+    $xtrace
+  else
+    iniset $inifile job pid "self"
+    async_log "$name" "Running synchronously: %command"
+    $xtrace
+    $*
+    return $?
+  fi
+}
+
+# Inner function that actually runs the requested task. I wrap it like this just so I can emit a
+# finish message as soon as the work is done, to make it easier to find the tracking just before an
+# error.
+function async_inner {
+  local name="$1"
+  local rc
+  local fifo="${DEST}/async/${name}.fifo"
+  shift
+  set -o xtrace
+  if $* >${DEST}/async/${name}.log 2>&1; then
+    rc=0
+    set +o xtrace
+    async_log "$name" "finished successfully"
+  else
+    rc=$?
+    set +o xtrace
+    async_log "$name" "FAILED with rc $rc"
+  fi
+  iniset ${DEST}/async/${name}.ini job end_time $(date "+%s%3N")
+  # Block on the fifo until we are signaled to exit by the main process
+  cat $fifo
+  return $rc
+}
+
+# Log a message about a job. If the message contains "%command" then the full command line of the
+# job will be substituted in the output
+function async_log {
+  local name="$1"
+  shift
+  local message="$*"
+  local inifile=${DEST}/async/${name}.ini
+  local pid
+  local command
+
+  pid=$(iniget $inifile job pid)
+  command=$(iniget $inifile job command | tr '#' '-')
+  message=$(echo "$message" | sed "s#%command#$command#g")
+
+  echo "[$BASHPID Async ${name}:${pid}]: $message"
+}
