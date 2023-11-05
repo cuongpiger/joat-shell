@@ -14,11 +14,13 @@ source ./inc/async
 # ******************************* FAKE FUNCTIONS are used for testing ******************************
 
 sleeping_10s() {
+  echo "Sleeping 10s"
   sleep 10
   echo "Wake up after 10s"
 }
 
 sleeping_5s() {
+  echo "Sleeping 5s"
   sleep 5
   echo "Wake up after 5s"
 }
