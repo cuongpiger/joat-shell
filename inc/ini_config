@@ -69,3 +69,18 @@ function ini_has_option {
   $xtrace
   [ -n "$line" ]
 }
+
+# Get an option from an INI file iniget config-file section option
+function iniget {
+  local xtrace
+  xtrace=$(set +o | grep xtrace)
+  set +o xtrace
+  local file=$1
+  local section=$2
+  local option=$3
+  local line
+
+  line=$(sed -ne "/^\[$section\]/,/^\[.*\]/ { /^$option[ \t]*=/ p; }" "$file")
+  echo ${line#*=}
+  $xtrace
+}
