@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "START TIME: $(date +%s)"
+echo "START TIME: $(date)"
 
 # **************************** DECLARE GLOBAL VARIABLES for Joat Shell *****************************
 
@@ -45,4 +45,4 @@ async_cleanup
 # Show the timing summary
 async_print_timing
 
-echo "END TIME: $(date +%s)"
+echo "END TIME: $(date)"
