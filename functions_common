@@ -1,0 +1,107 @@
+#!/bin/bash
+
+####################################################################################################
+# Author: Cuong. Duong Manh <cuongdm8499@gmailcom>
+# Description: The common functions that are popular used in JOAT Shell.
+####################################################################################################
+
+# **************************************** GLOBAL VARIABLES ****************************************
+
+declare -A -g _JOAT_SHELL_TIME_START
+declare -A -g _JOAT_SHELL_TIME_TOTAL
+
+# ************************************** IMPLEMENTED FUNCTIONS *************************************
+
+# trueorfalse <True|False> <VAR>
+#
+# Normalize config-value provided in variable VAR to either "True" or "False".  If VAR is unset
+# (i.e. $VAR evaluates as empty), the value of the second argument will be used as the default value.
+#
+#  Accepts as False: 0 no  No  NO  false False FALSE
+#  Accepts as True:  1 yes Yes YES true  True  TRUE
+#
+# usage:
+#  VAL=$(trueorfalse False VAL)
+function trueorfalse {
+  local xtrace
+  xtrace=$(set +o | grep xtrace)
+  set +o xtrace
+
+  local default=$1
+
+  if [ -z $2 ]; then
+    die $LINENO "variable to normalize required"
+  fi
+  local testval=${!2:-}
+
+  case "$testval" in
+  "1" | [yY]es | "YES" | [tT]rue | "TRUE") echo "True" ;;
+  "0" | [nN]o | "NO" | [fF]alse | "FALSE") echo "False" ;;
+  *) echo "$default" ;;
+  esac
+
+  $xtrace
+}
+
+# Prints line number and "message" then exits die $LINENO "message"
+function die {
+  local exitcode=$?
+  set +o xtrace
+  local line=$1
+  shift
+  if [ $exitcode == 0 ]; then
+    exitcode=1
+  fi
+  backtrace 2
+  err $line "$*"
+  # Give buffers a second to flush
+  sleep 1
+  exit $exitcode
+}
+
+# Prints backtrace info
+# filename:lineno:function
+# backtrace level
+function backtrace {
+  local level=$1
+  local deep
+  deep=$((${#BASH_SOURCE[@]} - 1))
+  echo "[Call Trace]"
+  while [ $level -le $deep ]; do
+    echo "${BASH_SOURCE[$deep]}:${BASH_LINENO[$deep - 1]}:${FUNCNAME[$deep - 1]}"
+    deep=$((deep - 1))
+  done
+}
+
+# time_start $name  starts the clock for a timer by name. Errors if that clock is already started.
+function time_start {
+  local name=$1
+  local start_time=${_JOAT_SHELL_TIME_START[$name]}
+  if [[ -n "$start_time" ]]; then
+    die $LINENO "Trying to start the clock on $name, but it's already been started"
+  fi
+  _JOAT_SHELL_TIME_START[$name]=$(date +%s%3N)
+}
+
+# time_stop $name stops the clock for a timer by name, and accumulate that time in the global
+# counter for that name. Errors if that clock had not previously been started.
+function time_stop {
+  local name
+  local end_time
+  local elapsed_time
+  local total
+  local start_time
+
+  name=$1
+  start_time=${_JOAT_SHELL_TIME_START[$name]}
+
+  if [[ -z "$start_time" ]]; then
+    die $LINENO "Trying to stop the clock on $name, but it was never started"
+  fi
+  end_time=$(date +%s%3N)
+  elapsed_time=$(($end_time - $start_time))
+  total=${_JOAT_SHELL_TIME_TOTAL[$name]:-0}
+  # reset the clock so we can start it in the future
+  _JOAT_SHELL_TIME_START[$name]=""
+  _JOAT_SHELL_TIME_TOTAL[$name]=$(($total + $elapsed_time))
+}

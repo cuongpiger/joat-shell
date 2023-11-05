@@ -5,6 +5,11 @@
 # Description: This script is used to run a function in background.
 ####################################################################################################
 
+# **************************************** PRE-CONFIGURATION ***************************************
+
+JOAT_SHELL_ALLOWING_PARALLEL=$(trueorfalse True JOAT_SHELL_ALLOWING_PARALLEL)
+_JOAT_SHELL_ASYNC_BG_TIME=0
+
 # ***************************************** PUBLIC METHODS *****************************************
 
 # Make sure our async dir is created and clean
@@ -21,6 +26,68 @@ function async_init {
 # Shortcut for running a shell function async. Uses the function name as the async name
 function async_runfunc {
   async_run $1 $*
+}
+
+# Wait for an async future to complete. May return immediately if already complete, or of the future
+# has already been waited on (avoid this). May block until the future completes.
+function async_wait {
+  local xtrace
+  xtrace=$(set +o | grep xtrace)
+  set +o xtrace
+
+  local pid rc running inifile runtime fifo
+  rc=0
+  for name in $*; do
+    running=$(ls ${JOAT_SHELL_DEST}/async/*.ini 2>/dev/null | wc -l)
+    inifile="${JOAT_SHELL_DEST}/async/${name}.ini"
+    fifo="${JOAT_SHELL_DEST}/async/${name}.fifo"
+
+    if pid=$(async_pidof "$name"); then
+      async_log "$name" "Waiting for completion of %command" \
+        "running on PID $pid ($running other jobs running)"
+      time_start async_wait
+      if [[ "$pid" != "self" ]]; then
+        # Signal the child to go ahead and exit since we are about to
+        # wait for it to collect its status.
+        async_log "$name" "Signaling child to exit"
+        echo WAKEUP >$fifo
+        async_log "$name" "Signaled"
+        # Do not actually call wait if we ran synchronously
+        if wait $pid; then
+          rc=0
+        else
+          rc=$?
+        fi
+        cat ${JOAT_SHELL_DEST}/async/${name}.log
+        rm -f $fifo
+      fi
+      time_stop async_wait
+      local start_time
+      local end_time
+      start_time=$(iniget $inifile job start_time)
+      end_time=$(iniget $inifile job end_time)
+      _async_incr_bg_time $(($end_time - $start_time))
+      runtime=$((($end_time - $start_time) / 1000))
+      async_log "$name" "finished %command with result" \
+        "$rc in $runtime seconds"
+      rm -f $inifile
+      if [ $rc -ne 0 ]; then
+        async_wait_dump $pid
+        echo Stopping async wait due to error: $*
+        break
+      fi
+    else
+      # This could probably be removed - it is really just here
+      # to help notice if you wait for something by the wrong
+      # name, but it also shows up for things we didn't start
+      # because they were not enabled.
+      echo Not waiting for async task $name that we never started or \
+        has already been waited for
+    fi
+  done
+
+  $xtrace
+  return $rc
 }
 
 # Check for uncollected futures and wait on them
@@ -113,4 +180,39 @@ function async_log {
   message=$(echo "$message" | sed "s#%command#$command#g")
 
   echo "[$BASHPID Async ${name}:${pid}]: $message"
+}
+
+# Get the PID of a named future to wait on
+function async_pidof {
+  local name="$1"
+  local inifile="${JOAT_SHELL_DEST}/async/${name}.ini"
+
+  if [ -f "$inifile" ]; then
+    iniget $inifile job pid
+  else
+    echo 'UNKNOWN'
+    return 1
+  fi
+}
+
+# Dump some information to help debug a failed wait
+function async_wait_dump {
+  local failpid=$1
+
+  echo "=== Wait failure dump from $BASHPID ==="
+  echo "Processes:"
+  ps -f
+  echo "Waiting jobs:"
+  for name in $(ls ${JOAT_SHELL_DEST}/async/*.ini); do
+    echo "Job $name :"
+    cat "$name"
+  done
+  echo "=== End wait failure dump ==="
+}
+
+# Keep track of how much total time was spent in background tasks
+# Takes a job runtime in ms.
+function _async_incr_bg_time {
+  local elapsed_ms="$1"
+  _JOAT_SHELL_ASYNC_BG_TIME=$(($_JOAT_SHELL_ASYNC_BG_TIME + $elapsed_ms))
 }
