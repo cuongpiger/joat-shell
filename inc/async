@@ -7,9 +7,35 @@
 
 # ***************************************** PUBLIC METHODS *****************************************
 
+# Make sure our async dir is created and clean
+function async_init {
+  local async_dir=${JOAT_SHELL_DEST}/async
+
+  # Clean any residue if present from previous runs
+  rm -Rf $async_dir
+
+  # Make sure we have a state directory
+  mkdir -p $async_dir
+}
+
 # Shortcut for running a shell function async. Uses the function name as the async name
 function async_runfunc {
   async_run $1 $*
+}
+
+# Check for uncollected futures and wait on them
+function async_cleanup {
+  local name
+
+  if [[ "$ALLOWING_PARALLEL" != "True" ]]; then
+    return 0
+  fi
+
+  for inifile in $(find ${JOAT_SHELL_DEST}/async -name '*.ini'); do
+    name=$(basename $pidfile .ini)
+    echo "WARNING: uncollected async future $name"
+    async_wait $name || true
+  done
 }
 
 # **************************************** PRIVATE METHODS *****************************************
@@ -26,8 +52,8 @@ function async_run {
 
   local name="$1"
   shift
-  local inifile=${DEST}/async/${name}.ini
-  local fifo=${DEST}/async/${name}.fifo
+  local inifile=${JOAT_SHELL_DEST}/async/${name}.ini
+  local fifo=${JOAT_SHELL_DEST}/async/${name}.fifo
 
   touch $inifile
   iniset $inifile job command "$*"
@@ -54,10 +80,10 @@ function async_run {
 function async_inner {
   local name="$1"
   local rc
-  local fifo="${DEST}/async/${name}.fifo"
+  local fifo="${JOAT_SHELL_DEST}/async/${name}.fifo"
   shift
   set -o xtrace
-  if $* >${DEST}/async/${name}.log 2>&1; then
+  if $* >${JOAT_SHELL_DEST}/async/${name}.log 2>&1; then
     rc=0
     set +o xtrace
     async_log "$name" "finished successfully"
@@ -66,7 +92,7 @@ function async_inner {
     set +o xtrace
     async_log "$name" "FAILED with rc $rc"
   fi
-  iniset ${DEST}/async/${name}.ini job end_time $(date "+%s%3N")
+  iniset ${JOAT_SHELL_DEST}/async/${name}.ini job end_time $(date "+%s%3N")
   # Block on the fifo until we are signaled to exit by the main process
   cat $fifo
   return $rc
@@ -78,7 +104,7 @@ function async_log {
   local name="$1"
   shift
   local message="$*"
-  local inifile=${DEST}/async/${name}.ini
+  local inifile=${JOAT_SHELL_DEST}/async/${name}.ini
   local pid
   local command
 
